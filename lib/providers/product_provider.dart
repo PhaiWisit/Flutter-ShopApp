@@ -71,7 +71,13 @@ class ProductProvider with ChangeNotifier {
     //       'https://cdn.pixabay.com/photo/2014/08/05/10/30/iphone-410324_960_720.jpg',
     // ),
   ];
+
   var _showFavoritesOnly = false;
+
+  final String authToken;
+  final String userId;
+
+  ProductProvider(this.authToken, this.userId, this._items);
 
   List<Product> get items {
     // if (_showFavoritesOnly) {
@@ -98,39 +104,49 @@ class ProductProvider with ChangeNotifier {
     return _items.firstWhere((prod) => prod.id == id);
   }
 
-  Future<void> fetchAndSetProducts() async {
-    var url = Uri.parse(
-        'https://flutter-update-286c5-default-rtdb.asia-southeast1.firebasedatabase.app/products.json');
+  Future<void> fetchAndSetProducts([bool filtterByUser = false]) async {
+    if (authToken.isNotEmpty) {
+      final filterString =
+          filtterByUser ? 'orderBy="creatorId"&equalTo="$userId"' : '';
+      var url = Uri.parse(
+          'https://flutter-update-286c5-default-rtdb.asia-southeast1.firebasedatabase.app/products.json?auth=$authToken&$filterString');
 
-    try {
-      final response = await http.get(url);
-      if (json.decode(response.body) == null) {
-        _items = [];
+      try {
+        final response = await http.get(url);
+        if (json.decode(response.body) == null) {
+          _items = [];
+          notifyListeners();
+          return;
+        }
+        final extractedData =
+            json.decode(response.body) as Map<String, dynamic>;
+        url = Uri.parse(
+            'https://flutter-update-286c5-default-rtdb.asia-southeast1.firebasedatabase.app/userFavorite/$userId.json?auth=$authToken');
+        final favoriteResponse = await http.get(url);
+        final favoriteData = json.decode(favoriteResponse.body);
+        final List<Product> loadedProducts = [];
+
+        extractedData.forEach((prodId, prodData) {
+          loadedProducts.add(Product(
+              id: prodId,
+              title: prodData['title'],
+              description: prodData['description'],
+              price: prodData['price'],
+              isFavorite:
+                  favoriteData == null ? false : favoriteData[prodId] ?? false,
+              imageUrl: prodData['imageUrl']));
+        });
+        _items = loadedProducts;
         notifyListeners();
-        return;
+      } catch (error) {
+        throw error;
       }
-      final extractedData = json.decode(response.body) as Map<String, dynamic>;
-      final List<Product> loadedProducts = [];
-
-      extractedData.forEach((prodId, prodData) {
-        loadedProducts.add(Product(
-            id: prodId,
-            title: prodData['title'],
-            description: prodData['description'],
-            price: prodData['price'],
-            isFavorite: prodData['isFavorite'],
-            imageUrl: prodData['imageUrl']));
-      });
-      _items = loadedProducts;
-      notifyListeners();
-    } catch (error) {
-      throw error;
     }
   }
 
   Future<void> addProduct(Product product) async {
-    var url = Uri.parse(
-        'https://flutter-update-286c5-default-rtdb.asia-southeast1.firebasedatabase.app/products.json');
+    final url = Uri.parse(
+        'https://flutter-update-286c5-default-rtdb.asia-southeast1.firebasedatabase.app/products.json?auth=$authToken');
     try {
       final response = await http.post(
         url,
@@ -139,7 +155,8 @@ class ProductProvider with ChangeNotifier {
           'description': product.description,
           'imageUrl': product.imageUrl,
           'price': product.price,
-          'isFavorite': product.isFavorite,
+          'creatorId': userId,
+          // 'isFavorite': product.isFavorite,
         }),
       );
 
@@ -164,7 +181,7 @@ class ProductProvider with ChangeNotifier {
     final prodIndex = _items.indexWhere((prod) => prod.id == id);
     if (prodIndex >= 0) {
       final url = Uri.parse(
-          'https://flutter-update-286c5-default-rtdb.asia-southeast1.firebasedatabase.app/products/$id.json');
+          'https://flutter-update-286c5-default-rtdb.asia-southeast1.firebasedatabase.app/products/$id.json?auth=$authToken');
       await http.patch(url,
           body: json.encode({
             'title': newProduct.title,
@@ -182,7 +199,7 @@ class ProductProvider with ChangeNotifier {
 
   Future<void> deleteProduct(String id) async {
     final url = Uri.parse(
-        'https://flutter-update-286c5-default-rtdb.asia-southeast1.firebasedatabase.app/products/$id.json');
+        'https://flutter-update-286c5-default-rtdb.asia-southeast1.firebasedatabase.app/products/$id.json?auth=$authToken');
     final existingProductIndex = _items.indexWhere((prod) => prod.id == id);
     Product? existingProduct = _items[existingProductIndex];
     _items.removeAt(existingProductIndex);

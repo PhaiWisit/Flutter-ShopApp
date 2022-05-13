@@ -11,13 +11,13 @@ class UserProductScreen extends StatelessWidget {
 
   Future<void> _refreshProducts(BuildContext context) async {
     await Provider.of<ProductProvider>(context, listen: false)
-        .fetchAndSetProducts();
+        .fetchAndSetProducts(true);
   }
 
   @override
   Widget build(BuildContext context) {
-    final productsData = Provider.of<ProductProvider>(context);
-
+    // final productsData = Provider.of<ProductProvider>(context);
+    print('rebuilding...');
     return Scaffold(
       drawer: AppDrawer(),
       appBar: AppBar(
@@ -31,23 +31,37 @@ class UserProductScreen extends StatelessWidget {
               icon: const Icon(Icons.add))
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () => _refreshProducts(context),
-        child: Padding(
-          padding: EdgeInsets.all(8),
-          child: ListView.builder(
-              itemCount: productsData.items.length,
-              itemBuilder: (context, index) => Column(
-                    children: [
-                      UserProductItem(
-                          id: productsData.items[index].id,
-                          title: productsData.items[index].title,
-                          imageUrl: productsData.items[index].imageUrl),
-                      Divider(),
-                    ],
-                  )),
-        ),
-      ),
+      body: FutureBuilder(
+          future: _refreshProducts(context),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.done) {
+              return RefreshIndicator(
+                onRefresh: () => _refreshProducts(context),
+                child: Consumer<ProductProvider>(
+                    builder: (context, productsData, child) {
+                  return Padding(
+                    padding: EdgeInsets.all(8),
+                    child: ListView.builder(
+                        itemCount: productsData.items.length,
+                        itemBuilder: (context, index) => Column(
+                              children: [
+                                UserProductItem(
+                                    id: productsData.items[index].id,
+                                    title: productsData.items[index].title,
+                                    imageUrl:
+                                        productsData.items[index].imageUrl),
+                                Divider(),
+                              ],
+                            )),
+                  );
+                }),
+              );
+            } else {
+              return Center(
+                child: CircularProgressIndicator(),
+              );
+            }
+          }),
     );
   }
 }
